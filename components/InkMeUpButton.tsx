@@ -21,6 +21,7 @@ export function InkMeUpButton({
         className={styles.button}
         onClick={onClick}
         disabled={disabled || isLoading}
+        data-loading={isLoading}
         aria-label={isLoading ? "Creating" : "Ink me up"}
       >
         <div className={styles.wrap}>

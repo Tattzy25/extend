@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { cn } from "@/lib/utils"
+import { useState, useRef, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Info, Download, Share2 } from "lucide-react"
+import { Info } from "lucide-react"
 import { InkMeUpButton } from "@/components/InkMeUpButton"
 import { GeneratedImagesGrid } from "./GeneratedImagesGrid"
 import Lightbox from "yet-another-react-lightbox"
@@ -37,12 +37,42 @@ function LabelWithTooltip({ id, label, tooltip }: { id?: string, label: string, 
   )
 }
 
+const GENERATE_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/generate"
+const RESULT_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/result"
+const MAX_RETRIES = 3
+const POLL_INTERVAL_MS = 2000
+const MAX_POLL_ATTEMPTS = 60
+
+const ERR_NETWORK = "Please check your network connection."
+const ERR_SERVER = "Server error. Please try again later."
+
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  retries = MAX_RETRIES
+): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr
+}
+
 export default function Home() {
+  const searchParams = useSearchParams()
+  const style = searchParams.get("style") ?? "Blackwork"
+  const color = searchParams.get("color") ?? "Black & White"
+  const customColor = searchParams.get("customColor") || null
+
   const [isLoading, setIsLoading] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
-  
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // Share State
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareFile, setShareFile] = useState<File | null>(null)
@@ -50,41 +80,110 @@ export default function Home() {
 
   // Form State
   const [prompt, setPrompt] = useState("")
-  const [images, setImages] = useState<string[]>([])
+  const [images] = useState<string[]>([])
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+    }
+  }, [])
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
 
   const handleGenerate = async () => {
-    if (isLoading) return // Prevent double clicks
-    
-    if (!prompt.trim()) {
-      toast.error("Please enter a prompt to generate an image")
+    if (isLoading) return
+
+    const trimmed = prompt.trim()
+    if (!trimmed) {
+      toast.error("Please answer the question.")
+      return
+    }
+    if (trimmed.length < 20) {
+      toast.error("Please enter at least 20 characters.")
       return
     }
 
     setIsLoading(true)
     setGeneratedImages([])
 
-    const formData = new FormData()
-    formData.append("prompt", prompt)
-    for (const img of images) {
-      if (img) formData.append("image", img)
+    let prediction_id: string | undefined
+    try {
+      prediction_id = await fetchWithRetry(async () => {
+        const response = await fetch(GENERATE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            style,
+            color,
+            prompt: trimmed,
+            customColor,
+          }),
+        })
+        if (!response.ok) {
+          const text = await response.text()
+          throw new Error(text || `HTTP ${response.status}`)
+        }
+        const json = await response.json()
+        const id = json?.prediction_id
+        if (!id) {
+          throw new Error("No prediction_id in response")
+        }
+        return id
+      })
+    } catch {
+      toast.error(ERR_NETWORK)
+      setIsLoading(false)
+      return
     }
 
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        body: formData,
-      })
-      const result = await res.json()
-      if (result.success && result.output) {
-        setGeneratedImages(Array.isArray(result.output) ? (result.output as string[]) : [result.output as string])
-      } else {
-        toast.error(result.error ?? "No output from generate")
+    let pollAttempt = 0
+
+    const poll = async () => {
+      pollAttempt++
+      if (pollAttempt > MAX_POLL_ATTEMPTS) {
+        stopPolling()
+        setIsLoading(false)
+        toast.error(ERR_SERVER)
+        return
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setIsLoading(false)
+
+      try {
+        const data = await fetchWithRetry(async () => {
+          const res = await fetch(`${RESULT_URL}?id=${prediction_id}`)
+          if (!res.ok) {
+            const text = await res.text()
+            throw new Error(text || `HTTP ${res.status}`)
+          }
+          return res.json()
+        })
+
+        if (data?.status === "failed") {
+          stopPolling()
+          setIsLoading(false)
+          toast.error(ERR_NETWORK)
+          return
+        }
+
+        if (data?.status === "succeeded") {
+          stopPolling()
+          setGeneratedImages(Array.isArray(data.images) ? data.images : [])
+          setIsLoading(false)
+          return
+        }
+      } catch {
+        stopPolling()
+        setIsLoading(false)
+        toast.error(ERR_NETWORK)
+      }
     }
+
+    pollIntervalRef.current = setInterval(poll, POLL_INTERVAL_MS)
+    poll()
   }
 
   const handleDownload = async (url: string, index: number) => {
@@ -175,7 +274,7 @@ export default function Home() {
         await navigator.clipboard.writeText(urls.join("\n"))
         toast.success("Links copied to clipboard")
       }
-    } catch (err) {
+    } catch {
       toast.error("Failed to share")
     }
   }
@@ -195,7 +294,7 @@ export default function Home() {
     }
   }
 
-  const handleLike = async (url: string, _index: number) => {
+  const handleLike = async (url: string, _: number) => {
     const LIKE_ENDPOINT = "/api/like" // placeholder – replace with your destination
     try {
       await fetch(LIKE_ENDPOINT, {
@@ -209,7 +308,7 @@ export default function Home() {
     }
   }
 
-  const handleUpload = async (url: string, _index: number) => {
+  const handleUpload = async (url: string, _: number) => {
     const UPLOAD_ENDPOINT = "/api/upload" // placeholder – replace with your destination
     try {
       await fetch(UPLOAD_ENDPOINT, {
@@ -291,7 +390,6 @@ export default function Home() {
           <InkMeUpButton
             onClick={handleGenerate}
             isLoading={isLoading}
-            disabled={isLoading}
           />
         </div>
       </div>

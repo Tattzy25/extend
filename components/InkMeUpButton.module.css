@@ -35,6 +35,11 @@
   opacity: 0.7;
 }
 
+/* Keep full opacity when loading (no fade) */
+.button:disabled[data-loading="true"] {
+  opacity: 1;
+}
+
 .button .wrap {
   font-size: 14px;
   font-weight: 500;
