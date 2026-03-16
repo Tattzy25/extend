@@ -8,12 +8,12 @@ const modelIdentifier =
 export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const prompt = formData.get("prompt") as string
-  const image = formData.get("image") as string | null
+  const images = formData.getAll("image") as string[]
   const mask = formData.get("mask") as string | null
 
   const input = constructPayload({
     prompt,
-    image: image || undefined,
+    images,
     mask: mask || undefined,
   })
 

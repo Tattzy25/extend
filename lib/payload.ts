@@ -6,7 +6,7 @@ import { ReplicateInput } from "./types";
  */
 export function constructPayload(params: {
   prompt: string;
-  image?: string;
+  images?: string[];
   mask?: string;
 }): ReplicateInput {
   const payload: ReplicateInput = {
@@ -26,8 +26,9 @@ export function constructPayload(params: {
     extra_lora_scale: 1,
   };
 
-  if (params.image) {
-    payload.image = params.image;
+  const image = params.images?.[0];
+  if (image) {
+    payload.image = image;
   }
 
   if (params.mask) {
