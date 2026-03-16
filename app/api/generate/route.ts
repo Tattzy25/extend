@@ -1,118 +1,51 @@
 import { NextRequest, NextResponse } from "next/server"
-import { buildDifyPrompt } from "@/lib/buildPrompt"
+import Replicate from "replicate"
+import { constructPayload } from "@/lib/payload"
 
-const DIFY_BASE = "https://api.dify.ai/v1"
-const PROMPT_KEY = process.env.DIFY_PROMPT_INPUT ?? "prompt"
-const OUTPUT_PATHS = (process.env.DIFY_OUTPUT_PATHS ?? "outputs.images,outputs.result,outputs").split(",")
-
-function extractImageUrls(outputs: unknown): string[] {
-  if (!outputs || typeof outputs !== "object") return []
-
-  const tryPath = (path: string) => {
-    const keys = path.split(".")
-    let cur: unknown = outputs
-    for (const k of keys) {
-      if (cur == null) return null
-      cur = (cur as Record<string, unknown>)[k]
-    }
-    return cur
-  }
-
-  for (const path of OUTPUT_PATHS) {
-    const val = tryPath(path.trim())
-    if (!val) continue
-    if (Array.isArray(val)) {
-      const urls = val
-        .map((item) => {
-          if (typeof item === "string") return item
-          if (item && typeof item === "object" && "url" in item)
-            return String((item as { url: unknown }).url)
-          return null
-        })
-        .filter((u): u is string => !!u && u.startsWith("http"))
-      if (urls.length > 0) return urls
-    }
-    if (typeof val === "string" && val.startsWith("http")) return [val]
-  }
-  return []
-}
+const modelIdentifier =
+  "tattzy25/tattty_4_all:4e8f6c1dc77db77dabaf98318cde3679375a399b434ae2db0e698804ac84919c"
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.DIFY_API_KEY
-  if (!apiKey) {
-    return NextResponse.json({ success: false, error: "DIFY_API_KEY not configured" }, { status: 500 })
-  }
+  const formData = await request.formData()
+  const prompt = formData.get("prompt") as string
+  const images = formData.getAll("image") as string[]
+  const mask = formData.get("mask") as string | null
 
-  let prompt: string
-  let user: string
-  let traceId: string
+  const input = constructPayload({
+    prompt,
+    images,
+    mask: mask || undefined,
+  })
 
-  const contentType = request.headers.get("content-type") ?? ""
-  if (contentType.includes("application/json")) {
-    const body = await request.json().catch(() => ({}))
-    const { story, colorMode, styleId, customStyle } = body
-    prompt = buildDifyPrompt({
-      story: story ?? "",
-      colorMode: colorMode ?? "full_color",
-      styleId: styleId ?? null,
-      customStyle: customStyle ?? "",
-    })
-    user = body.user ?? `extend-${Date.now()}`
-    traceId = body.trace_id ?? `extend-${Date.now()}`
-  } else {
-    const formData = await request.formData()
-    const rawPrompt = formData.get("prompt") as string | null
-    prompt = rawPrompt?.trim() ?? ""
-    user = `extend-${Date.now()}`
-    traceId = `extend-${Date.now()}`
-  }
-
-  if (!prompt.trim()) {
-    return NextResponse.json({ success: false, error: "Prompt is required" }, { status: 400 })
-  }
-
-  const workflowId = process.env.DIFY_WORKFLOW_ID
-  const url = workflowId
-    ? `${DIFY_BASE}/workflows/${workflowId}/run`
-    : `${DIFY_BASE}/workflows/run`
-
-  const inputs: Record<string, string> = {}
-  inputs[PROMPT_KEY] = prompt
+  const replicate = new Replicate({
+    auth: process.env.REPLICATE_API_TOKEN,
+  })
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "X-Trace-Id": traceId,
-      },
-      body: JSON.stringify({
-        inputs,
-        response_mode: "blocking",
-        user,
-      }),
-    })
+    const output = (await replicate.run(modelIdentifier, { input })) as unknown
 
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      const err = data?.message ?? data?.error ?? res.statusText
-      return NextResponse.json({ success: false, error: String(err) }, { status: res.status })
-    }
-
-    const result = data?.data ?? data
-    const outputs = result?.outputs ?? result
-    const urls = extractImageUrls(outputs)
-
-    if (urls.length === 0) {
+    if (!output) {
       return NextResponse.json(
-        { success: false, error: "No image URLs in Dify output. Check DIFY_OUTPUT_PATHS and workflow outputs." },
+        { success: false, error: "No output received from Replicate" },
         { status: 502 }
       )
     }
 
-    return NextResponse.json({ success: true, output: urls, workflow_run_id: data?.workflow_run_id })
+    const processOutput = (item: unknown): string => {
+      if (typeof item === "string") return item
+      if (item && typeof item === "object" && "url" in item) {
+        const urlVal = (item as { url: unknown }).url
+        if (typeof urlVal === "function") return (urlVal as () => URL)().toString()
+        if (urlVal != null) return String(urlVal)
+      }
+      return String(item)
+    }
+
+    const serializedOutput = Array.isArray(output)
+      ? (output as unknown[]).map(processOutput)
+      : [processOutput(output)]
+
+    return NextResponse.json({ success: true, output: serializedOutput })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })

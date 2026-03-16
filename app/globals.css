@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: transparent;
+  --background: oklch(0.9900 0 0);
   --foreground: oklch(0 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0 0 0);
@@ -168,10 +168,8 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html,
   body {
-    background: transparent;
-    @apply text-foreground;
+    @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
 }
