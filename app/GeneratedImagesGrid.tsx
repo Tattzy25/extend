@@ -1,10 +1,10 @@
 "use client"
 
+import Image from "next/image"
 import { Download, Loader2, Share2, Heart, Upload } from "lucide-react"
 
-// Placeholder endpoints - replace with your actual URLs
-const LIKE_ENDPOINT = "/api/like" // TODO: Add your like/favorite endpoint
-const UPLOAD_ENDPOINT = "/api/upload" // TODO: Add your upload destination endpoint
+const LIKE_ENDPOINT = "/api/like"
+const UPLOAD_ENDPOINT = "/api/upload"
 
 interface GeneratedImagesGridProps {
   images: string[]
@@ -60,7 +60,7 @@ export function GeneratedImagesGrid({
   const iconBtnBase =
     "relative p-2.5 touch-manipulation focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 rounded group/btn transition-colors"
   const iconCommon =
-    "h-7 w-7 [&>svg]:drop-shadow-[0_1px_2px_rgba(255,255,255,0.6)] [&>svg]:drop-shadow-[0_1px_3px_rgba(0,0,0,0.25)]"
+    "h-7 w-7 [&>svg]:drop-shadow-[0_1px_3px_rgba(0,0,0,0.25)]"
   const tooltipClass =
     "absolute -top-9 left-1/2 -translate-x-1/2 px-2 py-1.5 text-xs font-medium text-white bg-black/90 rounded shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-opacity duration-150 z-10"
 
@@ -105,10 +105,13 @@ export function GeneratedImagesGrid({
               className="relative overflow-hidden flex items-center justify-center w-full border border-border/50 hover:border-primary/50 transition-all duration-300 cursor-pointer aspect-square bg-muted/20 rounded-lg"
               onClick={() => onImageClick(i)}
             >
-              <img
+              <Image
                 src={src}
                 alt={`Generated image ${i + 1}`}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                fill
+                sizes="(max-width: 640px) 50vw, 25vw"
+                unoptimized
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
             </div>
@@ -124,7 +127,7 @@ export function GeneratedImagesGrid({
               >
                 <span className={tooltipClass}>Save to Gallery</span>
                 <Heart
-                  className={`${iconCommon} fill-red-600 stroke-red-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.4)] drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]`}
+                  className={`${iconCommon} fill-red-600 stroke-red-700 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]`}
                   aria-hidden="true"
                 />
               </button>
