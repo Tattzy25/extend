@@ -14,6 +14,12 @@ const orbitron = Orbitron({
 });
 
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
   title: "GoKAnI AI - Image Generator",
   description: "Generate amazing images with GoKAnI AI (Flux). A powerful AI image generation tool powered by Replicate.",

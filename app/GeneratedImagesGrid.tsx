@@ -58,19 +58,19 @@ export function GeneratedImagesGrid({
   }
 
   const iconBtnBase =
-    "relative p-2.5 touch-manipulation focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 rounded group/btn transition-colors"
+    "relative p-2.5 min-w-[44px] min-h-[44px] touch-manipulation focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 rounded group/btn transition-colors"
   const iconCommon =
-    "h-7 w-7 [&>svg]:drop-shadow-[0_1px_3px_rgba(0,0,0,0.25)]"
+    "h-6 w-6 sm:h-7 sm:w-7 [&>svg]:drop-shadow-[0_1px_3px_rgba(0,0,0,0.25)]"
   const tooltipClass =
     "absolute -top-9 left-1/2 -translate-x-1/2 px-2 py-1.5 text-xs font-medium text-white bg-black/90 rounded shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-opacity duration-150 z-10"
 
   const pillClass =
-    "font-[family-name:var(--font-orbitron)] bg-black text-white hover:bg-black/90 px-5 py-2.5 rounded-full text-sm font-semibold flex items-center gap-2 touch-manipulation focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+    "font-[family-name:var(--font-orbitron)] bg-black text-white hover:bg-black/90 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full text-sm font-semibold flex items-center gap-2 touch-manipulation focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-[1400px] mx-auto px-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="flex flex-col gap-2">
               <div
@@ -97,8 +97,8 @@ export function GeneratedImagesGrid({
   }
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto px-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
         {images.map((src, i) => (
           <div key={i} className="flex flex-col gap-2 group">
             <div
@@ -109,7 +109,7 @@ export function GeneratedImagesGrid({
                 src={src}
                 alt={`Generated image ${i + 1}`}
                 fill
-                sizes="(max-width: 640px) 50vw, 25vw"
+                sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
                 unoptimized
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
@@ -173,7 +173,7 @@ export function GeneratedImagesGrid({
       </div>
 
       {images.length > 0 && (
-        <div className="flex justify-center gap-3 mt-4 flex-wrap" data-slot="bulk-actions">
+        <div className="flex justify-center gap-2 sm:gap-3 mt-3 sm:mt-4 flex-wrap" data-slot="bulk-actions">
           <button
             type="button"
             className={pillClass}

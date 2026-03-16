@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Info, Loader2, Download, Sparkles, Share2 } from "lucide-react"
+import { Info, Download, Share2 } from "lucide-react"
+import { InkMeUpButton } from "@/components/InkMeUpButton"
 import { GeneratedImagesGrid } from "./GeneratedImagesGrid"
 import Lightbox from "yet-another-react-lightbox"
 import "yet-another-react-lightbox/styles.css"
@@ -269,8 +270,8 @@ export default function Home() {
   }))
 
   return (
-    <div className="flex flex-col w-full">
-      <div className="container mx-auto py-4 px-2 max-w-2xl space-y-3">
+    <div className="flex flex-col w-full min-h-screen">
+      <div className="container mx-auto py-4 px-4 sm:px-6 max-w-2xl space-y-3">
         <div className="space-y-1">
           <LabelWithTooltip
             id="prompt"
@@ -280,39 +281,22 @@ export default function Home() {
           <Textarea
             id="prompt"
             placeholder="Enter your prompt here..."
-            className="h-24 min-h-0"
+            className="h-24 min-h-0 min-w-0"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
         </div>
 
-        <div className="flex justify-center">
-          <Button
-            size="lg"
-            className={cn(
-              "w-full max-w-md text-2xl py-6 h-auto transition-transform active:scale-95",
-              isLoading && "opacity-50 cursor-not-allowed active:scale-100"
-            )}
+        <div className="flex justify-center" style={{ marginTop: 20 }}>
+          <InkMeUpButton
             onClick={handleGenerate}
+            isLoading={isLoading}
             disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-                CREATING...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-6 w-6" />
-                CREATE
-                <Sparkles className="ml-2 h-6 w-6" />
-              </>
-            )}
-          </Button>
+          />
         </div>
       </div>
 
-      <div className="flex flex-col items-center py-6">
+      <div className="flex flex-col items-center py-4 sm:py-6 px-2 sm:px-0">
         <GeneratedImagesGrid
           images={generatedImages}
           isLoading={isLoading}
