@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -39,29 +39,24 @@ function LabelWithTooltip({ id, label, tooltip }: { id?: string, label: string, 
 
 const GENERATE_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/generate"
 const RESULT_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/result"
-const MAX_RETRIES = 3
 const POLL_INTERVAL_MS = 2000
 const MAX_POLL_ATTEMPTS = 60
 
 const ERR_NETWORK = "Please check your network connection."
 const ERR_SERVER = "Server error. Please try again later."
 
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  retries = MAX_RETRIES
-): Promise<T> {
-  let lastErr: unknown
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn()
-    } catch (e) {
-      lastErr = e
-    }
+async function readJsonSafe(
+  res: Response
+): Promise<{ ok: true; json: unknown } | { ok: false; text: string }> {
+  const text = await res.text().catch(() => "")
+  try {
+    return { ok: true, json: text ? JSON.parse(text) : null }
+  } catch {
+    return { ok: false, text }
   }
-  throw lastErr
 }
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams()
   const style = searchParams.get("style") ?? "Blackwork"
   const color = searchParams.get("color") ?? "Black & White"
@@ -71,8 +66,7 @@ export default function Home() {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
+  
   // Share State
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareFile, setShareFile] = useState<File | null>(null)
@@ -80,24 +74,11 @@ export default function Home() {
 
   // Form State
   const [prompt, setPrompt] = useState("")
-  const [images] = useState<string[]>([])
 
-  useEffect(() => {
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-    }
-  }, [])
-
-  const stopPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-  }
+  // (Removed mount/isLoading debug posts; they were firing on renders/keystrokes in embeds.)
 
   const handleGenerate = async () => {
     if (isLoading) return
-
     const trimmed = prompt.trim()
     if (!trimmed) {
       toast.error("Please answer the question.")
@@ -107,83 +88,96 @@ export default function Home() {
       toast.error("Please enter at least 20 characters.")
       return
     }
-
     setIsLoading(true)
     setGeneratedImages([])
 
-    let prediction_id: string | undefined
+    // #region agent log
+    fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(start)',message:'generate start',data:{style,color,hasCustomColor:!!customColor,href:typeof window!=='undefined'?window.location.href:null,isIframe:typeof window!=='undefined'?window.self!==window.top:null,referrer:typeof document!=='undefined'?document.referrer:null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     try {
-      prediction_id = await fetchWithRetry(async () => {
-        const response = await fetch(GENERATE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            style,
-            color,
-            prompt: trimmed,
-            customColor,
-          }),
-        })
-        if (!response.ok) {
-          const text = await response.text()
-          throw new Error(text || `HTTP ${response.status}`)
-        }
-        const json = await response.json()
-        const id = json?.prediction_id
-        if (!id) {
-          throw new Error("No prediction_id in response")
-        }
-        return id
+      // Call external generator directly (bypasses /api/generate 404s on deploy)
+      const generateRes = await fetch(GENERATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ style, color, prompt: trimmed, customColor }),
       })
-    } catch {
-      toast.error(ERR_NETWORK)
-      setIsLoading(false)
-      return
-    }
 
-    let pollAttempt = 0
+      // #region agent log
+      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(generateRes)',message:'generate response meta',data:{ok:generateRes.ok,status:generateRes.status,contentType:generateRes.headers.get('content-type')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
-    const poll = async () => {
-      pollAttempt++
-      if (pollAttempt > MAX_POLL_ATTEMPTS) {
-        stopPolling()
+      if (!generateRes.ok) {
+        const text = await generateRes.text().catch(() => "")
+        toast.error(text || "Something went wrong. Please try again.")
         setIsLoading(false)
-        toast.error(ERR_SERVER)
         return
       }
 
-      try {
-        const data = await fetchWithRetry(async () => {
-          const res = await fetch(`${RESULT_URL}?id=${prediction_id}`)
-          if (!res.ok) {
-            const text = await res.text()
-            throw new Error(text || `HTTP ${res.status}`)
-          }
-          return res.json()
-        })
-
-        if (data?.status === "failed") {
-          stopPolling()
-          setIsLoading(false)
-          toast.error(ERR_NETWORK)
-          return
-        }
-
-        if (data?.status === "succeeded") {
-          stopPolling()
-          setGeneratedImages(Array.isArray(data.images) ? data.images : [])
-          setIsLoading(false)
-          return
-        }
-      } catch {
-        stopPolling()
+      const parsedGenerate = await readJsonSafe(generateRes)
+      if (!parsedGenerate.ok) {
+        const snippet = parsedGenerate.text.slice(0, 160)
+        toast.error(`Generator returned invalid JSON: ${snippet || "(empty response)"}`)
         setIsLoading(false)
-        toast.error(ERR_NETWORK)
+        return
       }
-    }
 
-    pollIntervalRef.current = setInterval(poll, POLL_INTERVAL_MS)
-    poll()
+      const generateJson = parsedGenerate.json as { prediction_id?: string } | null
+      const predictionId = generateJson?.prediction_id
+      if (!predictionId) {
+        toast.error("No prediction_id returned. Please try again.")
+        setIsLoading(false)
+        return
+      }
+
+      // #region agent log
+      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(predictionId)',message:'prediction id received',data:{hasPredictionId:!!predictionId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      let attempts = 0
+      let images: string[] = []
+
+      while (attempts < MAX_POLL_ATTEMPTS) {
+        attempts += 1
+        try {
+          const resultRes = await fetch(`${RESULT_URL}?id=${encodeURIComponent(predictionId)}`)
+          if (!resultRes.ok) {
+            const text = await resultRes.text().catch(() => "")
+            throw new Error(text || `HTTP ${resultRes.status}`)
+          }
+          const parsedResult = await readJsonSafe(resultRes)
+          if (!parsedResult.ok) {
+            const snippet = parsedResult.text.slice(0, 160)
+            throw new Error(`Result returned invalid JSON: ${snippet || "(empty response)"}`)
+          }
+          const resultJson = parsedResult.json as { status?: string; images?: unknown } | null
+          if (resultJson?.status === "succeeded") {
+            images = Array.isArray(resultJson.images) ? (resultJson.images as string[]) : []
+            break
+          }
+          if (resultJson?.status === "failed") {
+            throw new Error("Generation failed")
+          }
+        } catch {
+          // network or transient error; fall through to retry until max attempts
+        }
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+      }
+
+      // #region agent log
+      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_loading',location:'app/page.tsx:handleGenerate(done)',message:'generation finished',data:{attempts,imagesCount:images.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      if (!images.length) {
+        toast.error(ERR_SERVER)
+      } else {
+        setGeneratedImages(images)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : ERR_NETWORK)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleDownload = async (url: string, index: number) => {
@@ -202,8 +196,7 @@ export default function Home() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(blobUrl)
       toast.success("Image downloaded successfully")
-    } catch (error) {
-      console.error('Download failed:', error)
+    } catch {
       toast.error("Download failed. Please try again.")
     }
   }
@@ -224,8 +217,8 @@ export default function Home() {
             setShareDialogOpen(true)
             return
           }
-        } catch (error) {
-          console.warn("File preparation failed", error)
+        } catch {
+          toast.error("Could not prepare image for sharing. Please try downloading instead.")
         }
       }
 
@@ -240,8 +233,8 @@ export default function Home() {
         toast.success("Shared link successfully")
         return
       }
-    } catch (error) {
-      console.warn("Link sharing failed", error)
+    } catch {
+      toast.error("Link sharing failed. Please try again.")
     }
 
     // Fallback to Clipboard
@@ -294,7 +287,7 @@ export default function Home() {
     }
   }
 
-  const handleLike = async (url: string, _: number) => {
+  const handleLike = async (url: string) => {
     const LIKE_ENDPOINT = "/api/like" // placeholder – replace with your destination
     try {
       await fetch(LIKE_ENDPOINT, {
@@ -308,7 +301,7 @@ export default function Home() {
     }
   }
 
-  const handleUpload = async (url: string, _: number) => {
+  const handleUpload = async (url: string) => {
     const UPLOAD_ENDPOINT = "/api/upload" // placeholder – replace with your destination
     try {
       await fetch(UPLOAD_ENDPOINT, {
@@ -334,8 +327,6 @@ export default function Home() {
       toast.success("Shared image successfully")
       setShareDialogOpen(false)
     } catch (error) {
-      console.warn("Share execution failed", error)
-      
       // If user cancelled, just close dialog
       if (error instanceof Error && error.name === 'AbortError') {
         setShareDialogOpen(false)
@@ -353,7 +344,7 @@ export default function Home() {
           setShareDialogOpen(false)
           return
         } catch {
-           // ignore
+          toast.error("Link sharing failed. Try downloading instead.")
         }
       }
       
@@ -369,7 +360,7 @@ export default function Home() {
   }))
 
   return (
-    <div className="flex flex-col w-full min-h-screen">
+    <div className="flex flex-col w-full min-h-screen bg-transparent">
       <div className="container mx-auto py-4 px-4 sm:px-6 max-w-2xl space-y-3">
         <div className="space-y-1">
           <LabelWithTooltip
@@ -379,7 +370,7 @@ export default function Home() {
           />
           <Textarea
             id="prompt"
-            placeholder="Enter your prompt here..."
+            placeholder="There is no right or wrong answer."
             className="h-24 min-h-0 min-w-0"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -390,6 +381,7 @@ export default function Home() {
           <InkMeUpButton
             onClick={handleGenerate}
             isLoading={isLoading}
+            disabled={isLoading}
           />
         </div>
       </div>
@@ -434,5 +426,13 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
   )
 }

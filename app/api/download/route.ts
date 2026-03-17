@@ -27,8 +27,7 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });
-  } catch (error) {
-    console.error('Download error:', error);
+  } catch {
     return NextResponse.json({ error: 'Failed to download image' }, { status: 500 });
   }
 }

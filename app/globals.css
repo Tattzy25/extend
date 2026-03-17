@@ -170,10 +170,19 @@
   }
   html {
     -webkit-tap-highlight-color: transparent;
+    background: transparent;
   }
   body {
-    @apply bg-background text-foreground;
+    background: transparent;
+    @apply text-foreground;
     letter-spacing: var(--tracking-normal);
     touch-action: manipulation;
   }
+}
+
+/* Error toasts: via Sonner classNames.error API */
+.toast-error-red {
+  background: #7f1d1d !important;
+  color: #fef2f2 !important;
+  border: 1px solid #991b1b !important;
 }
