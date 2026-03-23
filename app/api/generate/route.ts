@@ -1,33 +1,66 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const GENERATE_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/generate"
-const RESULT_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/result"
-const MAX_RETRIES = 3
-const POLL_INTERVAL_MS = 3000
-const MAX_POLL_ATTEMPTS = 60
+// Server-side generation route.
+// Frontend should call ONLY /api/generate.
+// This route calls your MCP tool server-side (no browser-to-Dify calls).
 
-async function pollResult(predictionId: string): Promise<{ status: string; images?: string[] }> {
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    const res = await fetch(`${RESULT_URL}?id=${predictionId}`)
-    if (!res.ok) throw new Error(`Poll failed: ${res.status}`)
-    const data = await res.json()
-    if (data?.status === "succeeded") {
-      return { status: "succeeded", images: Array.isArray(data.images) ? data.images : [] }
-    }
-    if (data?.status === "failed") {
-      return { status: "failed" }
-    }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+type JsonRpcEnvelope = {
+  jsonrpc?: string
+  id?: string
+  result?: unknown
+  error?: { code?: number; message?: string; data?: unknown }
+}
+
+type McpToolCallResult = {
+  content?: Array<{ type?: string; text?: string }>
+  isError?: boolean
+}
+
+type McpToolResponse = {
+  body?: string
+  status_code?: number
+  files?: unknown[]
+}
+
+function tryParseJson<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
   }
-  return { status: "timeout" }
+}
+
+const MCP_URL = "https://api.dify.ai/mcp/server/pr44VVol6dVCBNuZ/mcp"
+
+async function mcpRpc(method: string, params: unknown): Promise<{ ok: true; json: JsonRpcEnvelope } | { ok: false; status: number; text: string }> {
+  const res = await fetch(MCP_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: method,
+      method,
+      params,
+    }),
+  })
+
+  const text = await res.text().catch(() => "")
+  if (!res.ok) return { ok: false, status: res.status, text }
+
+  const json = tryParseJson<JsonRpcEnvelope>(text)
+  if (!json) return { ok: false, status: 502, text: `Invalid JSON from MCP: ${text.slice(0, 160)}` }
+  return { ok: true, json }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const prompt = body?.prompt?.trim()
-    const style = body?.style ?? "Blackwork"
-    const color = body?.color ?? "Black & White"
+    const prompt = body?.prompt?.trim() as string | undefined
+    const artisticStyle = (body?.style ?? "modern") as string
+    const colorPreference = (body?.color ?? "vibrant") as string
 
     if (!prompt) {
       return NextResponse.json({ success: false, error: "Please enter a prompt." }, { status: 400 })
@@ -37,50 +70,76 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Please enter at least 20 characters." }, { status: 400 })
     }
 
-    let predictionId: string | undefined
-    let lastErr: unknown
-
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      try {
-        const res = await fetch(GENERATE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ style, color, prompt }),
-        })
-        if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
-        const json = await res.json()
-        predictionId = json?.prediction_id
-        if (!predictionId) throw new Error("No prediction_id in response")
-        break
-      } catch (e) {
-        lastErr = e
-      }
-    }
-
-    if (!predictionId) {
+    // IMPORTANT: Dify MCP expects an initialize call before tool calls.
+    const init = await mcpRpc("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "extend", version: "0.1" },
+    })
+    if (!init.ok) {
       return NextResponse.json(
-        { success: false, error: "Please check your network connection." },
+        { success: false, error: init.text || `MCP initialize failed (HTTP ${init.status})` },
         { status: 502 }
       )
     }
 
-    const result = await pollResult(predictionId)
-
-    if (result.status === "failed") {
+    const call = await mcpRpc("tools/call", {
+      name: "TaTTTy-MCP",
+      arguments: {
+        user_story: prompt,
+        artistic_style: artisticStyle,
+        // NOTE: tool schema uses the misspelled key `color_prefrence`
+        color_prefrence: colorPreference,
+      },
+    })
+    if (!call.ok) {
       return NextResponse.json(
-        { success: false, error: "Generation failed. Please try again." },
-        { status: 500 }
+        { success: false, error: call.text || `MCP tools/call failed (HTTP ${call.status})` },
+        { status: 502 }
       )
     }
 
-    if (result.status === "timeout") {
+    if (call.json.error) {
       return NextResponse.json(
-        { success: false, error: "Server is taking longer than expected. Please try again." },
-        { status: 504 }
+        { success: false, error: call.json.error.message || "MCP error" },
+        { status: 502 }
       )
     }
 
-    return NextResponse.json({ success: true, output: result.images ?? [] })
+    const result = call.json.result as McpToolCallResult | undefined
+    const textContent = result?.content?.find((c) => c.type === "text" && typeof c.text === "string")?.text
+    if (!textContent) {
+      return NextResponse.json(
+        { success: false, error: "MCP returned no text content." },
+        { status: 502 }
+      )
+    }
+
+    const toolResponse = tryParseJson<McpToolResponse>(textContent)
+    if (!toolResponse?.body) {
+      return NextResponse.json(
+        { success: false, error: `MCP tool response missing body: ${textContent.slice(0, 200)}` },
+        { status: 502 }
+      )
+    }
+
+    const parsedBody = tryParseJson<{ output?: unknown; status?: string; error?: unknown }>(toolResponse.body)
+    const output = parsedBody?.output
+    const images = Array.isArray(output)
+      ? (output.filter((x) => typeof x === "string") as string[])
+      : []
+
+    if (!images.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No images returned from MCP tool. status=${parsedBody?.status ?? "unknown"}`,
+        },
+        { status: 502 }
+      )
+    }
+
+    return NextResponse.json({ success: true, output: images })
   } catch (err) {
     return NextResponse.json(
       {

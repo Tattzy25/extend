@@ -407,30 +407,9 @@
       lucide.createIcons();
 
       try {
-        const response = await fetch('https://api.dify.ai/v1/workflows/run', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer app-n2DLWt8srfmKETdeMio1VO1y',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            inputs: {
-              user_story: prompt,
-              artistic_style: 'digital art, detailed, high quality',
-              color_preference: 'vibrant'
-            },
-            response_mode: 'blocking',
-            user: currentUserId
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Generation failed');
-        }
-
-        const result = await response.json();
-        const bodyData = JSON.parse(result.data.outputs.body);
-        renderGeneratedImages(bodyData.output);
+        // NOTE: This file is a design reference only.
+        // The actual app uses a server-side API route so no API keys live in the UI.
+        throw new Error('Design-only HTML: generation is handled by the Next.js app, not this file.');
 
         promptInput.value = '';
         promptInput.style.height = 'auto';

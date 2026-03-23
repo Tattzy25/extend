@@ -54,24 +54,8 @@ const ideaPrompts = [
   "A magical garden with glowing flora",
 ]
 
-const GENERATE_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/generate"
-const RESULT_URL = "https://TaTTTy--61d298c4216911f1bea342dde27851f2.web.val.run/result"
-const POLL_INTERVAL_MS = 2000
-const MAX_POLL_ATTEMPTS = 60
-
 const ERR_NETWORK = "Please check your network connection."
 const ERR_SERVER = "Server error. Please try again later."
-
-async function readJsonSafe(
-  res: Response
-): Promise<{ ok: true; json: unknown } | { ok: false; text: string }> {
-  const text = await res.text().catch(() => "")
-  try {
-    return { ok: true, json: text ? JSON.parse(text) : null }
-  } catch {
-    return { ok: false, text }
-  }
-}
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -172,88 +156,39 @@ function HomeContent() {
     setIsLoading(true)
     setGeneratedImages([])
 
-    // #region agent log
-    fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(start)',message:'generate start',data:{style,color,hasCustomColor:!!customColor,href:typeof window!=='undefined'?window.location.href:null,isIframe:typeof window!=='undefined'?window.self!==window.top:null,referrer:typeof document!=='undefined'?document.referrer:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     try {
-      // Call external generator directly (bypasses /api/generate 404s on deploy)
-      const generateRes = await fetch(GENERATE_URL, {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ style, color, prompt: trimmed, customColor }),
+        body: JSON.stringify({
+          prompt: trimmed,
+          style,
+          color: customColor ?? color,
+        }),
       })
 
-      // #region agent log
-      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(generateRes)',message:'generate response meta',data:{ok:generateRes.ok,status:generateRes.status,contentType:generateRes.headers.get('content-type')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+      const json = (await res.json().catch(() => null)) as
+        | { success: true; output: string[] }
+        | { success: false; error: string }
+        | null
 
-      if (!generateRes.ok) {
-        const text = await generateRes.text().catch(() => "")
-        toast.error(text || "Something went wrong. Please try again.")
-        setIsLoading(false)
+      if (!res.ok || !json) {
+        const errText = !res.ok ? await res.text().catch(() => "") : ""
+        toast.error((json && "error" in json ? json.error : "") || errText || ERR_SERVER)
         return
       }
 
-      const parsedGenerate = await readJsonSafe(generateRes)
-      if (!parsedGenerate.ok) {
-        const snippet = parsedGenerate.text.slice(0, 160)
-        toast.error(`Generator returned invalid JSON: ${snippet || "(empty response)"}`)
-        setIsLoading(false)
+      if (!json.success) {
+        toast.error(json.error || ERR_SERVER)
         return
       }
 
-      const generateJson = parsedGenerate.json as { prediction_id?: string } | null
-      const predictionId = generateJson?.prediction_id
-      if (!predictionId) {
-        toast.error("No prediction_id returned. Please try again.")
-        setIsLoading(false)
-        return
-      }
-
-      // #region agent log
-      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_request',location:'app/page.tsx:handleGenerate(predictionId)',message:'prediction id received',data:{hasPredictionId:!!predictionId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
-      let attempts = 0
-      let images: string[] = []
-
-      while (attempts < MAX_POLL_ATTEMPTS) {
-        attempts += 1
-        try {
-          const resultRes = await fetch(`${RESULT_URL}?id=${encodeURIComponent(predictionId)}`)
-          if (!resultRes.ok) {
-            const text = await resultRes.text().catch(() => "")
-            throw new Error(text || `HTTP ${resultRes.status}`)
-          }
-          const parsedResult = await readJsonSafe(resultRes)
-          if (!parsedResult.ok) {
-            const snippet = parsedResult.text.slice(0, 160)
-            throw new Error(`Result returned invalid JSON: ${snippet || "(empty response)"}`)
-          }
-          const resultJson = parsedResult.json as { status?: string; images?: unknown } | null
-          if (resultJson?.status === "succeeded") {
-            images = Array.isArray(resultJson.images) ? (resultJson.images as string[]) : []
-            break
-          }
-          if (resultJson?.status === "failed") {
-            throw new Error("Generation failed")
-          }
-        } catch {
-          // network or transient error; fall through to retry until max attempts
-        }
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-      }
-
-      // #region agent log
-      fetch('/api/debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'07ef70',runId:'pre-fix',hypothesisId:'H_loading',location:'app/page.tsx:handleGenerate(done)',message:'generation finished',data:{attempts,imagesCount:images.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
-      if (!images.length) {
+      if (!json.output?.length) {
         toast.error(ERR_SERVER)
-      } else {
-        setGeneratedImages(images)
+        return
       }
+
+      setGeneratedImages(json.output)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : ERR_NETWORK)
     } finally {
