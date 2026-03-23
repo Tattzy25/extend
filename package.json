@@ -1,5 +1,5 @@
 {
-  "name": "famosofluxo",
+  "name": "extend",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -55,13 +55,12 @@
     "react-hook-form": "^7.68.0",
     "react-resizable-panels": "^3.0.6",
     "recharts": "2.15.4",
-    "replicate": "^1.4.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "vaul": "^1.1.2",
-    "yet-another-react-lightbox": "^3.27.0",
-    "zod": "^4.1.13"
-  },
+    "yet-another-react-lightbox": "^3.27.0"
+    
+    },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

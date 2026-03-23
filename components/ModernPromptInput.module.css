@@ -1,0 +1,150 @@
+/* Modern prompt input styles adapted from newui.html */
+
+.fadeIn {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.promptContainer {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 2px 4px rgba(0, 0, 0, 0.02),
+    0 8px 16px rgba(0, 0, 0, 0.04),
+    0 24px 48px rgba(0, 0, 0, 0.04);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.promptContainer:focus-within {
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.15),
+    0 4px 8px rgba(99, 102, 241, 0.08),
+    0 16px 32px rgba(99, 102, 241, 0.12),
+    0 32px 64px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.glowRing {
+  position: absolute;
+  inset: -2px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #1f2937, #111827, #000000, #1f2937);
+  background-size: 400% 400%;
+  opacity: 0.25;
+  z-index: -1;
+  filter: blur(8px);
+  transition: opacity 0.4s ease;
+  animation: glowRotate 4s linear infinite;
+}
+
+.promptContainer:focus-within .glowRing {
+  opacity: 0.4;
+}
+
+@keyframes glowRotate {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.submitBtn {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 50%, #000000 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.submitBtn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 28px rgba(0, 0, 0, 0.4);
+}
+
+.submitBtn:active {
+  transform: scale(0.98);
+}
+
+.submitBtn:disabled {
+  opacity: 0.9;
+  cursor: not-allowed;
+}
+
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.typingIndicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.typingIndicatorActive {
+  opacity: 1;
+}
+
+.typingDot {
+  width: 6px;
+  height: 6px;
+  background: #6366f1;
+  border-radius: 50%;
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.typingDot2 {
+  animation-delay: 0.2s;
+}
+
+.typingDot3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-6px);
+  }
+}
+
+.fileChip {
+  animation: chipIn 0.3s ease forwards;
+}
+
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
