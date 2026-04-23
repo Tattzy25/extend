@@ -31,14 +31,24 @@ function tryParseJson<T>(value: string): T | null {
 }
 
 const MCP_URL = process.env.MCP_URL!
+const MCP_API_KEY = process.env.MCP_API_KEY // Optional: In case the new URL requires an API key
 
 async function mcpRpc(method: string, params: unknown): Promise<{ ok: true; json: JsonRpcEnvelope } | { ok: false; status: number; text: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  }
+  
+  // If the new Dify endpoint requires authentication, we'll pass it here
+  if (MCP_API_KEY) {
+    headers["Authorization"] = `Bearer ${MCP_API_KEY}`
+  }
+
+  console.log(`[MCP] Sending '${method}' request to ${MCP_URL}`)
+  
   const res = await fetch(MCP_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: method,
@@ -48,6 +58,8 @@ async function mcpRpc(method: string, params: unknown): Promise<{ ok: true; json
   })
 
   const text = await res.text().catch(() => "")
+  console.log(`[MCP] Received response from '${method}': Status ${res.status} - ${text}`)
+  
   if (!res.ok) return { ok: false, status: res.status, text }
 
   const json = tryParseJson<JsonRpcEnvelope>(text)
