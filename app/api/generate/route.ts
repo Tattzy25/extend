@@ -30,7 +30,7 @@ function tryParseJson<T>(value: string): T | null {
   }
 }
 
-const MCP_URL = "https://api.dify.ai/mcp/server/pr44VVol6dVCBNuZ/mcp"
+const MCP_URL = process.env.MCP_URL!
 
 async function mcpRpc(method: string, params: unknown): Promise<{ ok: true; json: JsonRpcEnvelope } | { ok: false; status: number; text: string }> {
   const res = await fetch(MCP_URL, {
